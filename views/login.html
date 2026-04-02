@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — Playbook Comercial</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',sans-serif;background:#1A1A2E;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-box{background:#fff;border-radius:16px;padding:48px 40px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;}
+.login-box h1{font-family:'Playfair Display',serif;font-size:24px;color:#1A1A2E;margin-bottom:4px;}
+.login-box h2{font-size:14px;color:#C8973E;font-weight:500;margin-bottom:32px;}
+.login-box input{width:100%;padding:14px 16px;border:2px solid #eee;border-radius:10px;font-size:15px;font-family:inherit;outline:none;transition:border-color .2s;}
+.login-box input:focus{border-color:#C8973E;}
+.login-box button{width:100%;padding:14px;background:#C8973E;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:16px;transition:background .2s;}
+.login-box button:hover{background:#8B6F47;}
+.error{color:#CC3333;font-size:13px;margin-top:12px;display:none;}
+.error.show{display:block;}
+.footer{color:#666;font-size:12px;margin-top:24px;}
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h1>Playbook Comercial</h1>
+  <h2>Clínica Natália Penteado</h2>
+  <form method="POST" action="/login">
+    <input type="password" name="password" placeholder="Digite a senha de acesso" autofocus required>
+    <button type="submit">Entrar</button>
+  </form>
+  <p class="error" id="error">Senha incorreta. Tente novamente.</p>
+  <p class="footer">Smarten Digital Solutions</p>
+</div>
+<script>
+if(location.search.includes('error=1'))document.getElementById('error').classList.add('show');
+</script>
+</body>
+</html>
