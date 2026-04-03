@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const RAW_PASSWORD = process.env.APP_PASSWORD || "natalia2026";
 
-// JSON DATABASE
+// ═══ JSON DATABASE ═══
 const DB_PATH = path.join(__dirname, "data", "playbook.json");
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db = { columns: [], cards: [], nextColId: 1, nextCardId: 1 };
@@ -16,7 +16,7 @@ function loadDB() { try { if (fs.existsSync(DB_PATH)) db = JSON.parse(fs.readFil
 function saveDB() { try { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); } catch (e) { console.error("DB save error:", e.message); } }
 loadDB();
 
-// AUTH
+// ═══ AUTH ═══
 function hashPw(pw) { return crypto.createHash("sha256").update(pw + SECRET).digest("hex"); }
 function createToken(ip) { const p = JSON.stringify({ ip, ts: Date.now() }); return Buffer.from(p).toString("base64url") + "." + crypto.createHmac("sha256", SECRET).update(p).digest("hex"); }
 function verifyToken(t) { if (!t) return false; const [b, h] = t.split("."); if (!b || !h) return false; try { const p = Buffer.from(b, "base64url").toString(); return crypto.createHmac("sha256", SECRET).update(p).digest("hex") === h && Date.now() - JSON.parse(p).ts < 30*24*60*60*1000; } catch { return false; } }
@@ -35,7 +35,7 @@ app.get("/logout", (req, res) => { res.clearCookie("auth_token"); res.redirect("
 app.use("/public", auth, express.static(path.join(__dirname, "public")));
 app.get("/", auth, (req, res) => res.sendFile(path.join(__dirname, "views", "board.html")));
 
-// API COLUMNS
+// ═══ API COLUMNS ═══
 app.get("/api/columns", auth, (req, res) => {
   const cols = [...db.columns].sort((a, b) => a.position - b.position);
   res.json(cols.map(c => ({ ...c, cards: db.cards.filter(d => d.column_id === c.id).sort((a, b) => a.position - b.position) })));
@@ -52,7 +52,7 @@ app.delete("/api/columns/:id", auth, (req, res) => {
   const id = +req.params.id; db.cards = db.cards.filter(c => c.column_id !== id); db.columns = db.columns.filter(c => c.id !== id); saveDB(); res.json({ ok: true });
 });
 
-// API CARDS
+// ═══ API CARDS ═══
 app.post("/api/cards", auth, (req, res) => {
   const { column_id, label, label_class, title, description, content } = req.body;
   const pos = db.cards.filter(c => c.column_id === column_id).reduce((m, c) => Math.max(m, c.position), -1) + 1;
@@ -61,6 +61,13 @@ app.post("/api/cards", auth, (req, res) => {
 });
 app.put("/api/cards/:id", auth, (req, res) => {
   const c = db.cards.find(x => x.id === +req.params.id); if (!c) return res.status(404).json({});
+  // Save version before updating if requested
+  if (req.body.save_version && c.content) {
+    if (!c.versions) c.versions = [];
+    c.versions.unshift({ title: c.title, content: c.content, date: new Date().toISOString() });
+    if (c.versions.length > 20) c.versions = c.versions.slice(0, 20); // max 20 versions
+  }
+  delete req.body.save_version;
   ["column_id","label","label_class","title","description","content","position"].forEach(f => { if (req.body[f] !== undefined) c[f] = req.body[f]; }); saveDB(); res.json({ ok: true });
 });
 app.delete("/api/cards/:id", auth, (req, res) => { db.cards = db.cards.filter(c => c.id !== +req.params.id); saveDB(); res.json({ ok: true }); });
@@ -72,4 +79,4 @@ app.post("/api/cards/move", auth, (req, res) => {
   saveDB(); res.json({ ok: true });
 });
 
-app.listen(PORT, () => console.log("\n  Playbook rodando em http://localhost:" + PORT + "\n  Senha: " + RAW_PASSWORD + "\n"));
+app.listen(PORT, () => console.log(`\n  Playbook rodando em http://localhost:${PORT}\n  Senha: ${RAW_PASSWORD}\n`));
