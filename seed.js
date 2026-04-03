@@ -1,31 +1,22 @@
-const Database = require("better-sqlite3");
 const path = require("path");
 const fs = require("fs");
 
-const DB_PATH = path.join(__dirname, "data", "playbook.db");
+const DB_PATH = path.join(__dirname, "data", "playbook.json");
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-// Remove old DB if exists
-if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+const db = { columns: [], cards: [], nextColId: 1, nextCardId: 1 };
 
-const db = new Database(DB_PATH);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+function col(title, emoji, pos) {
+  const id = db.nextColId++;
+  db.columns.push({ id, title, emoji, position: pos });
+  return id;
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS columns (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, emoji TEXT DEFAULT '', position INTEGER NOT NULL DEFAULT 0);
-  CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY AUTOINCREMENT, column_id INTEGER NOT NULL REFERENCES columns(id) ON DELETE CASCADE, label TEXT DEFAULT '', label_class TEXT DEFAULT 'label-abordagem', title TEXT NOT NULL, description TEXT DEFAULT '', content TEXT DEFAULT '', position INTEGER NOT NULL DEFAULT 0);
-`);
+function card(colId, label, labelClass, title, desc, content, pos) {
+  db.cards.push({ id: db.nextCardId++, column_id: colId, label, label_class: labelClass, title, description: desc, content, position: pos });
+}
 
-const insertCol = db.prepare("INSERT INTO columns (title, emoji, position) VALUES (?, ?, ?)");
-const insertCard = db.prepare("INSERT INTO cards (column_id, label, label_class, title, description, content, position) VALUES (?,?,?,?,?,?,?)");
-
-function col(title, emoji, pos) { return insertCol.run(title, emoji, pos).lastInsertRowid; }
-function card(colId, label, labelClass, title, desc, content, pos) { insertCard.run(colId, label, labelClass, title, desc, content, pos); }
-
-const tx = db.transaction(() => {
-
-// ═══════ COL 1 ═══════
+// ═══════ COL 1: CONTATO INICIAL ═══════
 const c1 = col("Contato Inicial", "📣", 0);
 card(c1,"ABORDAGEM","label-abordagem","👩‍💻 Abordagem Inicial","Como se apresentar e identificar a dor",`<h3>Objetivo</h3><p>Apresentar-se, identificar a dor e conduzir para a construção de autoridade em no máximo 2 mensagens.</p><span class="tag-when">Usar: quando o lead entra pela primeira vez</span><h3>Mensagem 1 — Apresentação + Dor</h3><div class="msg-box good">Olá, [Nome]! Sou a Letícia, assistente da Dra. Natália Penteado. Que bom que você entrou em contato! 😊<br><br>O que mais te incomoda hoje?<br>• Expressão cansada<br>• Perda de contorno<br>• Olhar pesado<br>• Nariz<br>• Outro</div><p><strong>Por que funciona:</strong> as opções facilitam a resposta. Pergunta aberta gera silêncio.</p><h3>Se a pessoa mandou só "Oi"</h3><div class="msg-box good">Olá! Sou a Letícia, assistente da Dra. Natália. O que mais te incomoda hoje na sua aparência?</div><h3>Se a mensagem não carregou (erro Kommo)</h3><div class="msg-box good">Oi, [Nome]! Sua mensagem não carregou por aqui. Me conta: o que mais te incomoda hoje?</div><h3>⚠️ Regras</h3><ul><li><strong>Sempre texto, nunca áudio.</strong></li><li><strong>Se quiser ligar:</strong> ligue direto, não peça permissão.</li><li><strong>Responda em menos de 5 minutos.</strong></li></ul>`,0);
 
@@ -35,7 +26,7 @@ card(c1,"ABORDAGEM","label-abordagem","📅 Agendamento da Consulta","Fechar a c
 
 card(c1,"EXEMPLO","label-abordagem","✍️ Exemplo: Fluxo Completo","Conversa real do início ao agendamento",`<h3>Cenário</h3><p>Lead do Meta Ads. Mulher, 52 anos, Higienópolis.</p><div class="msg-box">Lead: "Oi, tenho interesse."</div><div class="msg-box good">Letícia: "Olá! Sou a Letícia, assistente da Dra. Natália Penteado. 😊 O que mais te incomoda hoje?<br>• Expressão cansada<br>• Perda de contorno<br>• Olhar pesado<br>• Nariz<br>• Outro"</div><div class="msg-box">Lead: "Expressão cansada e perda de contorno."</div><div class="msg-box good">Letícia: "A Dra. Natália tem 14 anos de experiência e 3 formações. Especialista em restauração facial estratégica."</div><div class="msg-box good">Letícia: "Ela trabalha com o Protocolo Revera Face. O primeiro passo é a entrega de um diagnóstico onde ela mapeia o que restaurar, manter e nunca tocar."</div><div class="msg-box good">Letícia: "A próxima etapa é agendar a entrega do diagnóstico. A consulta é R$ 400. Qual o melhor horário?"</div><div class="msg-box">Lead: "Pode ser quarta à tarde?"</div><div class="msg-box good">Letícia: "Perfeito! Reservei quarta às 15h. Te envio confirmação. 🤍"</div><p><strong>Total: 5 mensagens. Direto, personalizado.</strong></p>`,3);
 
-// ═══════ COL 2 ═══════
+// ═══════ COL 2: FOLLOW-UP ═══════
 const c2 = col("Follow-Up", "🔛", 1);
 card(c2,"FOLLOW-UP","label-followup","📋 Cadência de Follow-Up","Regras de espaçamento e timing",`<h3>Princípio</h3><p>Decisão de compra em estética leva até 3 meses. Follow-up é conversar, não cobrar.</p><h3>Cadência</h3><ul><li><strong>FU 1:</strong> 3 dias → Case ou vídeo relacionado à dor.</li><li><strong>FU 2:</strong> 7 dias → Conteúdo do Instagram.</li><li><strong>FU 3:</strong> 10 dias → Último contato suave.</li><li><strong>Após o 3º:</strong> Descarte. "Perdido: sem retorno".</li></ul><h3>Exceção</h3><p>Se a paciente deu data ("só recebo dia 24"), siga a data exata.</p>`,0);
 
@@ -47,7 +38,7 @@ card(c2,"FOLLOW-UP","label-followup","💬 FU 3 — Último Contato","10 dias de
 
 card(c2,"FOLLOW-UP","label-followup","📅 FU com Data Marcada","Quando ela deu data específica",`<span class="tag-when">Na data exata que a paciente indicou</span><h3>"Só recebo dia 24"</h3><div class="msg-box good">Oi, [Nome]! Você mencionou que queria agendar nessa época. A doutora tem horário na próxima semana. Funciona?</div><h3>"Volto de viagem dia 10"</h3><div class="msg-box good">Oi, [Nome]! Bem-vinda de volta! 😊 Quando conversamos, você mencionou interesse no diagnóstico. Quer que eu reserve?</div>`,4);
 
-// ═══════ COL 3 ═══════
+// ═══════ COL 3: QUEBRAR OBJEÇÕES ═══════
 const c3 = col("Quebrar Objeções", "🚫", 2);
 card(c3,"OBJEÇÃO","label-objecao","➡️ \"Ela é dermatologista?\"","Objeção de credencial",`<span class="tag-obj">Objeção de credencial — a mais comum</span><div class="msg-box good">A Dra. Natália é biomédica esteta com 14 anos de experiência e 3 formações acadêmicas — incluindo Odontologia em curso. Ela desenvolveu um método proprietário. A experiência de 14 anos conta mais que o rótulo. Te envio as especializações.</div><p><strong>Contexto:</strong> Existe áudio de paciente relatando experiência ruim com dermato. Credencial não garante qualidade.</p>`,0);
 
@@ -65,7 +56,7 @@ card(c3,"OBJEÇÃO","label-objecao","➡️ \"Só recebo dia X\"","Qualificaçã
 
 card(c3,"OBJEÇÃO","label-objecao","➡️ \"Mora longe\"","Distância como barreira",`<span class="tag-obj">Objeção de logística</span><div class="msg-box good">A clínica fica em Higienópolis — próximo à Av. Angélica. Muitas pacientes vêm dos Jardins, Itaim e Pinheiros. A consulta dura cerca de 1h.</div><p>Se mora em zona leste/Guarulhos: provavelmente não é perfil.</p>`,7);
 
-// ═══════ COL 4 ═══════
+// ═══════ COL 4: FECHAMENTO ═══════
 const c4 = col("Fechamento", "⚜️", 3);
 card(c4,"FECHAMENTO","label-fechamento","⚜️ Paciente decidida","Quando ela já quer agendar",`<h3>Cenário</h3><p>"Quero agendar consulta com a doutora."</p><p><strong>NÃO complique.</strong> Agende.</p><div class="msg-box good">Oi, [Nome]! Perfeito! A consulta de diagnóstico é R$ 400 e dura cerca de 1h. Temos disponibilidade essa semana. Qual o melhor horário?</div>`,0);
 
@@ -73,7 +64,7 @@ card(c4,"FECHAMENTO","label-fechamento","⚜️ Muda após o preço","Silêncio 
 
 card(c4,"FECHAMENTO","label-fechamento","⚜️ Técnica: \"Entrega de Diagnóstico\"","A palavra que muda a conversão",`<h3>Antes (genérico)</h3><div class="msg-box bad">Gostaria de agendar uma avaliação com a doutora?</div><h3>Depois (estratégico)</h3><div class="msg-box good">A próxima etapa é a entrega do seu diagnóstico. Qual o melhor horário?</div><h3>Por que funciona</h3><ul><li>"Entrega" = ela vai receber algo concreto.</li><li>"Diagnóstico" = técnico, sério, profissional.</li><li>"Próxima etapa" = comando, não pedido.</li><li>"Horário" = chamada para ação imediata.</li></ul>`,2);
 
-// ═══════ COL 5 ═══════
+// ═══════ COL 5: ANTI-VÁCUO ═══════
 const c5 = col("Anti-Vácuo", "❌", 4);
 card(c5,"ANTI-VÁCUO","label-antivacuo","💰 Sumiu no início","Respondeu a dor e sumiu",`<span class="tag-when">24h após sumir</span><div class="msg-box good">[Nome], vi que você mencionou [dor]. A Dra. Natália atende muitos casos assim. Te envio um conteúdo sobre o tema. [link]</div><p>Se não responder em 48h: "Perdido: deixou de responder".</p>`,0);
 
@@ -83,14 +74,14 @@ card(c5,"ANTI-VÁCUO","label-antivacuo","💰 Sumiu após R$ 400","Ouviu preço 
 
 card(c5,"ANTI-VÁCUO","label-antivacuo","🚫 Frases Proibidas","O que NUNCA dizer",`<h3>❌ Evitar sempre</h3><div class="msg-box bad">"Você ainda tem interesse?"</div><div class="msg-box bad">"Consigo manter seu contato?"</div><div class="msg-box bad">"Posso te ajudar em alguma coisa?"</div><div class="msg-box bad">"Qualquer dúvida estou à disposição."</div><h3>✅ Usar em vez disso</h3><div class="msg-box good">"Vi um caso que lembrei de você."</div><div class="msg-box good">"Esse resultado foi em 4 dias."</div><div class="msg-box good">"A agenda da doutora é limitada."</div>`,3);
 
-// ═══════ COL 6 ═══════
+// ═══════ COL 6: REATIVAÇÃO ═══════
 const c6 = col("Reativação", "🔙", 5);
 card(c6,"REATIVAÇÃO","label-reativacao","🔙 Reativação 01","15–20 dias · Reconexão",`<div class="msg-box good">Oi, [Nome]! Estava revendo conversas e lembrei do nosso papo sobre [dor]. A doutora publicou um conteúdo novo que achei que combinava. [link]</div>`,0);
 card(c6,"REATIVAÇÃO","label-reativacao","🔙 Reativação 02","30 dias · Novidade",`<div class="msg-box good">Oi, [Nome]! A Dra. Natália começou a trabalhar com análise facial biométrica que mede rejuvenescimento em anos. Lembrei de você!</div>`,1);
 card(c6,"REATIVAÇÃO","label-reativacao","🔙 Reativação 03","45 dias · Case impactante",`<div class="msg-box good">[Nome], uma paciente da doutora fez o protocolo e a família só percebeu quando viu a foto antiga. Se quiser conversar sobre o seu caso, estou aqui.</div>`,2);
 card(c6,"REATIVAÇÃO","label-reativacao","🔙 Reativação 04","60 dias · Última tentativa",`<div class="msg-box good">[Nome], a doutora abriu a agenda de [mês]. Vagas limitadas. Se tiver interesse, me avisa que garanto um horário.</div><p>Se não responder: encerre o ciclo.</p>`,3);
 
-// ═══════ COL 7 ═══════
+// ═══════ COL 7: FLUXOS E REGRAS ═══════
 const c7 = col("Fluxos e Regras", "📋", 6);
 card(c7,"FLUXO","label-fluxo","✅ Qualificação Rápida","É perfil ou não?",`<h3>✅ É perfil</h3><ul><li>Mora em Higienópolis, Jardins, Itaim, Pinheiros.</li><li>Respondeu rápido, sabe o que quer.</li><li>Já fez procedimento antes.</li><li>Paga sem questionar.</li></ul><h3>❌ Não é perfil</h3><ul><li>"Só recebo dia X" — sem R$ 400 = sem perfil.</li><li>Pede pacote com preço fixo.</li><li>Mora longe e não quer se deslocar.</li><li>Nunca respondeu nada.</li></ul>`,0);
 
@@ -100,14 +91,10 @@ card(c7,"FLUXO","label-fluxo","✅ Técnica de Escrita","Mensagens curtas, palav
 
 card(c7,"FLUXO","label-fluxo","✅ Organização do Kommo","Colunas e motivos de perda",`<h3>Colunas do funil</h3><ul><li><strong>Novo lead</strong> — Enviar 1ª msg em < 5 min.</li><li><strong>Em conversa</strong> — Interagindo.</li><li><strong>Aguardando resposta</strong> — Recebeu preço.</li><li><strong>Agendado</strong> — Confirmar 24h antes.</li><li><strong>Nutrição</strong> — Interesse mas não agora.</li></ul><h3>Motivos de perda</h3><ul><li>Distância / Preço / Insegurança / Sem retorno / Deixou de responder / Não quer / Spam</li></ul><p>⚠️ Elimine colunas antigas: "Sem dinheiro", "Mora longe", "Reativação", "R$ 300 off".</p>`,3);
 
-card(c7,"FLUXO","label-fluxo","📊 Relatório Semanal","O que reportar",`<h3>Métricas semanais</h3><ul><li>Total de leads novos</li><li>Taxa de resposta (responderam ÷ total)</li><li>Consultas agendadas</li><li>Consultas realizadas</li><li>Top 3 motivos de perda</li><li>Objeções mais comuns (alimenta conteúdo)</li></ul><p>Planilha simples no Drive, atualizada toda semana.</p>`,4);
+card(c7,"FLUXO","label-fluxo","📊 Relatório Semanal","O que reportar",`<h3>Métricas semanais</h3><ul><li>Total de leads novos</li><li>Taxa de resposta (responderam / total)</li><li>Consultas agendadas</li><li>Consultas realizadas</li><li>Top 3 motivos de perda</li><li>Objeções mais comuns (alimenta conteúdo)</li></ul><p>Planilha simples no Drive, atualizada toda semana.</p>`,4);
 
-}); // end transaction
-
-tx();
-console.log("\n  ✅ Banco de dados criado e populado com sucesso!");
+// ═══ SAVE ═══
+fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+console.log(`\n  ✅ Banco JSON criado com sucesso!`);
 console.log(`  📁 ${DB_PATH}`);
-const colCount = db.prepare("SELECT COUNT(*) as c FROM columns").get().c;
-const cardCount = db.prepare("SELECT COUNT(*) as c FROM cards").get().c;
-console.log(`  📊 ${colCount} colunas, ${cardCount} cards\n`);
-db.close();
+console.log(`  📊 ${db.columns.length} colunas, ${db.cards.length} cards\n`);
