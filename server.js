@@ -15,6 +15,7 @@ let db = { columns: [], cards: [], nextColId: 1, nextCardId: 1 };
 function loadDB() { try { if (fs.existsSync(DB_PATH)) db = JSON.parse(fs.readFileSync(DB_PATH, "utf-8")); } catch (e) { console.error("DB load error:", e.message); } }
 function saveDB() { try { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); } catch (e) { console.error("DB save error:", e.message); } }
 loadDB();
+if(db.columns.length===0){try{require("./seed");loadDB();console.log("Auto-seeded");}catch(e){console.error("Seed err:",e.message);}}
 
 // ═══ AUTH ═══
 function hashPw(pw) { return crypto.createHash("sha256").update(pw + SECRET).digest("hex"); }
