@@ -72,18 +72,26 @@ body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg)
 
 /* Input */
 .chat-input-area { padding: 16px 20px; background: #fff; border-top: 1px solid #eee; flex-shrink: 0; }
+.image-preview { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f5f5; border-radius: 10px; margin-bottom: 10px; }
+.image-preview img { max-height: 80px; max-width: 200px; border-radius: 8px; object-fit: cover; border: 1px solid #ddd; }
+.btn-remove-img { background: none; border: 1px solid #ddd; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--red); }
+.btn-remove-img:hover { border-color: var(--red); background: #FFEBEE; }
 .input-wrapper { display: flex; gap: 10px; align-items: flex-end; }
+.btn-attach { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 12px; font-size: 20px; cursor: pointer; flex-shrink: 0; transition: all .2s; }
+.btn-attach:hover { background: var(--light); border-color: var(--gold); }
 .input-wrapper textarea { flex: 1; border: 1px solid #ddd; border-radius: 12px; padding: 12px 16px; font-size: 14px; font-family: inherit; resize: none; outline: none; color: var(--mid); min-height: 44px; max-height: 120px; }
 .input-wrapper textarea:focus { border-color: var(--gold); }
 .input-wrapper button { background: var(--gold); color: #fff; border: none; border-radius: 12px; padding: 12px 20px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; }
 .input-wrapper button:hover { background: var(--accent); }
 .input-wrapper button:disabled { opacity: .5; cursor: not-allowed; }
 .input-hint { font-size: 11px; color: #bbb; margin-top: 6px; text-align: center; }
+.msg-image { max-width: 300px; max-height: 250px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #eee; display: block; }
+.msg-image:hover { opacity: .9; }
 
 /* Settings */
 .settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); z-index: 100; display: none; align-items: center; justify-content: center; }
 .settings-overlay.open { display: flex; }
-.settings-modal { background: #fff; border-radius: 16px; width: 500px; max-width: 90vw; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+.settings-modal { background: #fff; border-radius: 16px; width: 700px; max-width: 95vw; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
 .settings-header { padding: 20px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 .settings-header h2 { font-size: 18px; }
 .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #999; }
@@ -96,6 +104,10 @@ body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg)
 .settings-footer { padding: 16px 24px; border-top: 1px solid #eee; text-align: right; }
 .btn-save-settings { background: var(--gold); color: #fff; border: none; border-radius: 10px; padding: 10px 24px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .btn-save-settings:hover { background: var(--accent); }
+
+/* Drag & drop */
+.chat-main.drag-active { background: var(--light); }
+.chat-main.drag-active::after { content: '📸 Solte a imagem aqui'; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: var(--gold); color: #fff; padding: 20px 40px; border-radius: 16px; font-size: 18px; font-weight: 600; z-index: 10; pointer-events: none; }
 
 /* Responsive */
 @media (max-width: 768px) {

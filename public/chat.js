@@ -1,5 +1,6 @@
 let chatHistory = [];
 let settings = { model: 'gpt-4o-mini', token: '', permanentContext: '' };
+let pendingImage = null; // base64 image data
 
 // ═══════════════════════════════════════════════
 // INIT
@@ -13,7 +14,71 @@ async function init() {
     if (s.hasToken) document.getElementById('openaiToken').placeholder = '••••••••• (configurado)';
     document.getElementById('aiModel').value = settings.model;
     document.getElementById('permanentContext').value = settings.permanentContext;
+    if (s.systemPrompt) document.getElementById('systemPrompt').value = s.systemPrompt;
+    if (s.playbookContext) document.getElementById('playbookPreview').value = s.playbookContext;
+    if (s.extraDocs) document.getElementById('extraDocs').value = s.extraDocs;
   } catch (e) { console.error('Settings load error:', e); }
+}
+
+// ═══════════════════════════════════════════════
+// IMAGE HANDLING
+// ═══════════════════════════════════════════════
+function handlePaste(event) {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      event.preventDefault();
+      const file = item.getAsFile();
+      processImageFile(file);
+      return;
+    }
+  }
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file && file.type.startsWith('image/')) {
+    processImageFile(file);
+  }
+  event.target.value = ''; // reset
+}
+
+function processImageFile(file) {
+  // Resize if too large (max 1MB for API efficiency)
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const MAX = 1200;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingImage = canvas.toDataURL('image/jpeg', 0.85);
+      showImagePreview(pendingImage);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function showImagePreview(dataUrl) {
+  const preview = document.getElementById('imagePreview');
+  const img = document.getElementById('previewImg');
+  img.src = dataUrl;
+  preview.style.display = 'flex';
+}
+
+function clearImage() {
+  pendingImage = null;
+  document.getElementById('imagePreview').style.display = 'none';
+  document.getElementById('previewImg').src = '';
 }
 
 // ═══════════════════════════════════════════════
@@ -27,13 +92,35 @@ const SHORTCUTS = {
   preco: "A paciente perguntou sobre preços. Como responder sem perder a venda?",
   reativacao: "Preciso reativar um lead antigo (mais de 15 dias). Me ajude com uma mensagem estratégica.",
   fechamento: "A paciente está interessada e quer agendar. Como conduzir o fechamento da consulta de diagnóstico?",
+  print: "Colei um print da conversa. Analise a conversa, identifique a etapa do funil, e me diga exatamente o que responder agora. Sugira 2-3 opções de mensagem.",
 };
 
 function sendShortcut(key) {
   const text = SHORTCUTS[key];
   document.getElementById('userInput').value = text;
   document.getElementById('userInput').focus();
+  // For print shortcut, also open file picker
+  if (key === 'print') {
+    document.getElementById('fileInput').click();
+  }
 }
+
+// Drag & drop images anywhere in chat
+document.addEventListener('DOMContentLoaded', () => {
+  const chatMain = document.querySelector('.chat-main');
+  if (!chatMain) return;
+  chatMain.addEventListener('dragover', e => { e.preventDefault(); chatMain.classList.add('drag-active'); });
+  chatMain.addEventListener('dragleave', e => { if (!chatMain.contains(e.relatedTarget)) chatMain.classList.remove('drag-active'); });
+  chatMain.addEventListener('drop', e => {
+    e.preventDefault();
+    chatMain.classList.remove('drag-active');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      processImageFile(file);
+      document.getElementById('userInput').focus();
+    }
+  });
+});
 
 // ═══════════════════════════════════════════════
 // SEND MESSAGE
@@ -41,21 +128,24 @@ function sendShortcut(key) {
 async function sendMessage() {
   const input = document.getElementById('userInput');
   const text = input.value.trim();
-  if (!text) return;
+  const hasImage = !!pendingImage;
+  if (!text && !hasImage) return;
 
   const extraCtx = document.getElementById('extraContext').value.trim();
+  const imageData = pendingImage;
 
-  // Add user message to UI
-  addMessage('user', text);
+  // Add user message to UI (with image if present)
+  addMessage('user', text, imageData);
   input.value = '';
   input.style.height = 'auto';
+  clearImage();
 
   // Set loading
   setStatus('loading', '● Pensando...');
   const sendBtn = document.getElementById('sendBtn');
   sendBtn.disabled = true;
 
-  // Build messages array
+  // Build messages for API
   const messages = chatHistory.map(m => ({ role: m.role, content: m.content }));
 
   try {
@@ -65,6 +155,7 @@ async function sendMessage() {
       body: JSON.stringify({
         messages,
         extraContext: extraCtx,
+        image: imageData || undefined,
       }),
     });
 
@@ -88,8 +179,16 @@ async function sendMessage() {
 // ═══════════════════════════════════════════════
 // UI HELPERS
 // ═══════════════════════════════════════════════
-function addMessage(role, content) {
-  chatHistory.push({ role: role === 'ai' ? 'assistant' : 'user', content });
+function addMessage(role, content, imageData) {
+  // Store in history - for images, build OpenAI vision format
+  if (role === 'user' && imageData) {
+    const parts = [];
+    if (content) parts.push({ type: 'text', text: content });
+    parts.push({ type: 'image_url', image_url: { url: imageData, detail: 'high' } });
+    chatHistory.push({ role: 'user', content: parts });
+  } else {
+    chatHistory.push({ role: role === 'ai' ? 'assistant' : 'user', content: content });
+  }
 
   const container = document.getElementById('chatMessages');
   const div = document.createElement('div');
@@ -97,11 +196,13 @@ function addMessage(role, content) {
 
   const avatar = role === 'ai' ? '🧠' : '👤';
   const formattedContent = role === 'ai' ? formatMarkdown(content) : escapeHtml(content).replace(/\n/g, '<br>');
+  const imageHtml = imageData ? `<img src="${imageData}" class="msg-image" onclick="window.open(this.src)">` : '';
 
   div.innerHTML = `
     <div class="msg-avatar">${avatar}</div>
     <div class="msg-content">
-      ${formattedContent}
+      ${imageHtml}
+      ${formattedContent || (imageData ? '<em>📸 Imagem enviada</em>' : '')}
       ${role === 'ai' ? '<div class="msg-actions"><button class="btn-copy" onclick="copyMsg(this)">📋 Copiar</button></div>' : ''}
     </div>`;
 
@@ -201,12 +302,14 @@ async function saveSettings() {
   const token = document.getElementById('openaiToken').value.trim();
   const model = document.getElementById('aiModel').value;
   const permanentContext = document.getElementById('permanentContext').value.trim();
+  const systemPrompt = document.getElementById('systemPrompt').value.trim();
+  const extraDocs = document.getElementById('extraDocs').value.trim();
 
   try {
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token || undefined, model, permanentContext }),
+      body: JSON.stringify({ token: token || undefined, model, permanentContext, systemPrompt: systemPrompt || undefined, extraDocs: extraDocs || undefined }),
     });
     const data = await res.json();
     if (data.ok) {

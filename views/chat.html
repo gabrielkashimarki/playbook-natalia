@@ -29,6 +29,7 @@
       <button class="shortcut" onclick="sendShortcut('preco')">💰 Perguntou preço</button>
       <button class="shortcut" onclick="sendShortcut('reativacao')">🔙 Reativar lead antigo</button>
       <button class="shortcut" onclick="sendShortcut('fechamento')">⚜️ Fechar agendamento</button>
+      <button class="shortcut" onclick="sendShortcut('print')">📸 Analisar print da conversa</button>
     </div>
     <div class="sidebar-section">
       <h3>Contexto personalizado</h3>
@@ -59,7 +60,7 @@
             <li>Montar respostas para leads</li>
             <li>Quebrar objeções</li>
             <li>Criar follow-ups estratégicos</li>
-            <li>Sugerir a melhor abordagem para cada situação</li>
+            <li>📸 <strong>Analisar prints de conversas</strong> — cola a imagem com Ctrl+V</li>
           </ul>
           <p>Me conta a situação ou usa os atalhos ao lado! 👈</p>
         </div>
@@ -67,11 +68,19 @@
     </div>
 
     <div class="chat-input-area">
+      <div class="image-preview" id="imagePreview" style="display:none">
+        <img id="previewImg" src="">
+        <button onclick="clearImage()" class="btn-remove-img">✕ Remover</button>
+      </div>
       <div class="input-wrapper">
-        <textarea id="userInput" placeholder="Descreva a situação ou cole a conversa do lead..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+        <label class="btn-attach" title="Anexar imagem">
+          📎
+          <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)" style="display:none">
+        </label>
+        <textarea id="userInput" placeholder="Descreva a situação, cole a conversa ou cole um print (Ctrl+V)..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}" onpaste="handlePaste(event)"></textarea>
         <button id="sendBtn" onclick="sendMessage()">Enviar ➤</button>
       </div>
-      <div class="input-hint">Enter para enviar · Shift+Enter para nova linha</div>
+      <div class="input-hint">Enter para enviar · Shift+Enter para nova linha · <strong>Ctrl+V para colar print</strong></div>
     </div>
   </main>
 </div>
@@ -92,16 +101,42 @@
       <div class="setting-group">
         <label>🤖 Modelo</label>
         <select id="aiModel">
-          <option value="gpt-4o-mini">GPT-4o Mini (rápido, barato)</option>
-          <option value="gpt-4o">GPT-4o (melhor qualidade)</option>
-          <option value="gpt-4-turbo">GPT-4 Turbo</option>
-          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (mais barato)</option>
+          <option value="gpt-5.4-mini">GPT-5.4 Mini (recomendado — rápido e inteligente)</option>
+          <option value="gpt-5.4-nano">GPT-5.4 Nano (mais barato)</option>
+          <option value="gpt-5.4">GPT-5.4 (flagship — mais potente)</option>
+          <option value="gpt-5.2">GPT-5.2 (anterior, mais barato que 5.4)</option>
+          <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+          <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
+          <option value="gpt-4o-mini">GPT-4o Mini (legado)</option>
         </select>
       </div>
       <div class="setting-group">
         <label>📝 Contexto adicional permanente</label>
-        <textarea id="permanentContext" rows="5" placeholder="Informações que a IA deve sempre considerar: regras da clínica, horários, promoções ativas..."></textarea>
-        <small>Este contexto é enviado em toda conversa como informação de base.</small>
+        <textarea id="permanentContext" rows="4" placeholder="Promoções ativas, horários especiais, regras extras..."></textarea>
+        <small>Enviado em toda conversa como informação de base.</small>
+      </div>
+
+      <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+      <h3 style="font-size:15px;margin-bottom:12px">🧠 Prompt do Sistema (o que a IA sabe)</h3>
+      <div class="setting-group">
+        <label>Prompt principal — editável</label>
+        <textarea id="systemPrompt" rows="15" style="font-size:12px;font-family:monospace;line-height:1.5"></textarea>
+        <small>Este é o prompt que define a personalidade e regras da IA. Edite para ajustar o comportamento.</small>
+      </div>
+
+      <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+      <h3 style="font-size:15px;margin-bottom:12px">📋 Playbook carregado (automático)</h3>
+      <div class="setting-group">
+        <textarea id="playbookPreview" rows="10" readonly style="font-size:11px;font-family:monospace;line-height:1.4;background:#f9f9f9;color:#888"></textarea>
+        <small>Conteúdo do Kanban enviado à IA automaticamente. Para alterar, edite os cards no Kanban.</small>
+      </div>
+
+      <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+      <h3 style="font-size:15px;margin-bottom:12px">📄 Documentos extras</h3>
+      <div class="setting-group">
+        <label>Documentos de referência (cole aqui qualquer material adicional)</label>
+        <textarea id="extraDocs" rows="8" placeholder="Cole aqui: scripts de atendimento, técnicas de persuasão, informações de promoções, dados de exames, protocolos..."></textarea>
+        <small>Este conteúdo é enviado à IA junto com o playbook. Use para adicionar material que não está nos cards.</small>
       </div>
     </div>
     <div class="settings-footer">
