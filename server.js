@@ -317,10 +317,14 @@ app.post("/api/chat", auth, async (req, res) => {
   ];
 
   try {
+    const modelName = appSettings.model || "gpt-5.4-mini";
+    const usesNewApi = modelName.startsWith("gpt-5") || modelName.startsWith("o3") || modelName.startsWith("o4");
+    const tokenParam = usesNewApi ? "max_completion_tokens" : "max_tokens";
+    
     const body = JSON.stringify({
-      model: appSettings.model || "gpt-5.4-mini",
+      model: modelName,
       messages: fullMessages,
-      max_tokens: 2000,
+      [tokenParam]: 2000,
       temperature: 0.7,
     });
 
