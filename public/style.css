@@ -125,3 +125,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--mid);overfl
   .editor-toolbar{gap:2px;}
   .editor-toolbar button{padding:4px 6px;font-size:11px;}
 }
+
+/* Chat button */
+.btn-chat{text-decoration:none;background:var(--dark);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;transition:all .2s;border:none;cursor:pointer;font-family:inherit;}
+.btn-chat:hover{background:var(--gold);}

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assistente IA — Playbook Comercial</title>
+<link rel="stylesheet" href="/public/style.css">
+<link rel="stylesheet" href="/public/chat.css">
+</head>
+<body>
+<div class="chat-layout">
+  <!-- Sidebar -->
+  <aside class="chat-sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2>🧠 Assistente IA</h2>
+      <p>Clínica Natália Penteado</p>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="nav-item">📋 Kanban</a>
+      <a href="/chat" class="nav-item active">💬 Chat IA</a>
+      <button class="nav-item" onclick="openSettings()">⚙️ Configurações</button>
+    </nav>
+    <div class="sidebar-section">
+      <h3>Atalhos rápidos</h3>
+      <button class="shortcut" onclick="sendShortcut('lead_novo')">🆕 Lead novo chegou</button>
+      <button class="shortcut" onclick="sendShortcut('objecao')">🚫 Quebrar objeção</button>
+      <button class="shortcut" onclick="sendShortcut('followup')">🔄 Follow-up suave</button>
+      <button class="shortcut" onclick="sendShortcut('sumiu')">👻 Lead sumiu</button>
+      <button class="shortcut" onclick="sendShortcut('preco')">💰 Perguntou preço</button>
+      <button class="shortcut" onclick="sendShortcut('reativacao')">🔙 Reativar lead antigo</button>
+      <button class="shortcut" onclick="sendShortcut('fechamento')">⚜️ Fechar agendamento</button>
+    </div>
+    <div class="sidebar-section">
+      <h3>Contexto personalizado</h3>
+      <textarea id="extraContext" placeholder="Cole aqui informações extras: conversas do lead, situação específica, nome da paciente..." rows="4"></textarea>
+    </div>
+    <div class="sidebar-footer">
+      <button onclick="clearChat()" class="btn-clear">🗑️ Limpar conversa</button>
+    </div>
+  </aside>
+
+  <!-- Chat main -->
+  <main class="chat-main">
+    <div class="chat-header-bar">
+      <button class="toggle-sidebar" onclick="toggleSidebar()">☰</button>
+      <div>
+        <h1>Assistente Comercial — Protocolo Revera</h1>
+        <span class="status" id="aiStatus">● Pronto</span>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="msg ai">
+        <div class="msg-avatar">🧠</div>
+        <div class="msg-content">
+          <p>Olá! Sou sua assistente de vendas especializada no <strong>Protocolo Revera Face</strong> da Dra. Natália Penteado.</p>
+          <p>Posso te ajudar com:</p>
+          <ul>
+            <li>Montar respostas para leads</li>
+            <li>Quebrar objeções</li>
+            <li>Criar follow-ups estratégicos</li>
+            <li>Sugerir a melhor abordagem para cada situação</li>
+          </ul>
+          <p>Me conta a situação ou usa os atalhos ao lado! 👈</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="input-wrapper">
+        <textarea id="userInput" placeholder="Descreva a situação ou cole a conversa do lead..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+        <button id="sendBtn" onclick="sendMessage()">Enviar ➤</button>
+      </div>
+      <div class="input-hint">Enter para enviar · Shift+Enter para nova linha</div>
+    </div>
+  </main>
+</div>
+
+<!-- Settings Modal -->
+<div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-modal">
+    <div class="settings-header">
+      <h2>⚙️ Configurações</h2>
+      <button onclick="closeSettings()" class="close-btn">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="setting-group">
+        <label>🔑 Token OpenAI</label>
+        <input type="password" id="openaiToken" placeholder="sk-..." autocomplete="off">
+        <small>Sua chave da API OpenAI. Nunca é compartilhada — fica salva apenas no servidor.</small>
+      </div>
+      <div class="setting-group">
+        <label>🤖 Modelo</label>
+        <select id="aiModel">
+          <option value="gpt-4o-mini">GPT-4o Mini (rápido, barato)</option>
+          <option value="gpt-4o">GPT-4o (melhor qualidade)</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (mais barato)</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label>📝 Contexto adicional permanente</label>
+        <textarea id="permanentContext" rows="5" placeholder="Informações que a IA deve sempre considerar: regras da clínica, horários, promoções ativas..."></textarea>
+        <small>Este contexto é enviado em toda conversa como informação de base.</small>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button onclick="saveSettings()" class="btn-save-settings">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/public/chat.js"></script>
+</body>
+</html>
