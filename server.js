@@ -2,28 +2,33 @@ const express = require("express");
 const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 const path = require("path");
-const fs = require("fs");
 const https = require("https");
+const { createClient } = require("@supabase/supabase-js");
 
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const RAW_PASSWORD = process.env.APP_PASSWORD || "natalia2026";
 
-// ═══ JSON DATABASE ═══
-const DB_PATH = path.join(__dirname, "data", "playbook.json");
-const SETTINGS_PATH = path.join(__dirname, "data", "settings.json");
-if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-let db = { columns: [], cards: [], nextColId: 1, nextCardId: 1 };
+// ═══ SUPABASE DATABASE ═══
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://juklovypfwaqqmmjeyso.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_KEY || "sb_publishable_IC2flbBqUTlJJ0tnuSwnPw_utJXyeZH";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ═══ SETTINGS CACHE ═══
 let appSettings = { openaiToken: process.env.OPENAI_API_KEY || "", model: "gpt-5.4-mini", permanentContext: "", customSystemPrompt: "", extraDocs: "" };
 
-function loadDB() { try { if (fs.existsSync(DB_PATH)) db = JSON.parse(fs.readFileSync(DB_PATH, "utf-8")); } catch (e) { console.error("DB load error:", e.message); } }
-function saveDB() { try { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); } catch (e) { console.error("DB save error:", e.message); } }
-function loadSettings() { try { if (fs.existsSync(SETTINGS_PATH)) appSettings = { ...appSettings, ...JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf-8")) }; } catch (e) {} }
-function saveSettings() { try { fs.writeFileSync(SETTINGS_PATH, JSON.stringify(appSettings, null, 2)); } catch (e) {} }
+async function loadSettings() {
+  try {
+    const { data } = await supabase.from("settings").select("key, value");
+    if (data) data.forEach(s => { if (s.key !== "openaiToken" || !appSettings.openaiToken) appSettings[s.key] = s.value; });
+  } catch (e) { console.error("Settings load error:", e.message); }
+}
 
-loadDB();
-loadSettings();
-if (db.columns.length === 0) { try { require("./seed"); loadDB(); console.log("Auto-seeded: " + db.columns.length + " cols, " + db.cards.length + " cards"); } catch(e) { console.error("Seed error:", e.message); } }
+async function saveSetting(key, value) {
+  await supabase.from("settings").upsert({ key, value }, { onConflict: "key" });
+}
+
+loadSettings().then(() => console.log("Settings loaded from Supabase"));
 
 // ═══ AUTH ═══
 function hashPw(pw) { return crypto.createHash("sha256").update(pw + SECRET).digest("hex"); }
@@ -46,79 +51,106 @@ app.get("/", auth, (req, res) => res.sendFile(path.join(__dirname, "views", "boa
 app.get("/chat", auth, (req, res) => res.sendFile(path.join(__dirname, "views", "chat.html")));
 
 // ═══ API COLUMNS ═══
-app.get("/api/columns", auth, (req, res) => {
-  const cols = [...db.columns].sort((a, b) => a.position - b.position);
-  res.json(cols.map(c => ({ ...c, cards: db.cards.filter(d => d.column_id === c.id).sort((a, b) => a.position - b.position) })));
+app.get("/api/columns", auth, async (req, res) => {
+  const { data: cols } = await supabase.from("columns").select("*").order("position");
+  const { data: cards } = await supabase.from("cards").select("*").order("position");
+  res.json(cols.map(c => ({ ...c, cards: (cards || []).filter(d => d.column_id === c.id) })));
 });
-app.post("/api/columns", auth, (req, res) => {
-  const c = { id: db.nextColId++, title: req.body.title || "Nova Coluna", emoji: req.body.emoji || "", position: db.columns.reduce((m, x) => Math.max(m, x.position), -1) + 1 };
-  db.columns.push(c); saveDB(); res.json({ id: c.id });
+app.post("/api/columns", auth, async (req, res) => {
+  const { data: existing } = await supabase.from("columns").select("position").order("position", { ascending: false }).limit(1);
+  const pos = (existing?.[0]?.position ?? -1) + 1;
+  const { data, error } = await supabase.from("columns").insert({ title: req.body.title || "Nova Coluna", emoji: req.body.emoji || "", position: pos }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ id: data.id });
 });
-app.put("/api/columns/:id", auth, (req, res) => {
-  const c = db.columns.find(x => x.id === +req.params.id); if (!c) return res.status(404).json({});
-  ["title","emoji","position"].forEach(f => { if (req.body[f] !== undefined) c[f] = req.body[f]; }); saveDB(); res.json({ ok: true });
+app.put("/api/columns/:id", auth, async (req, res) => {
+  const updates = {};
+  ["title","emoji","position"].forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  await supabase.from("columns").update(updates).eq("id", +req.params.id);
+  res.json({ ok: true });
 });
-app.delete("/api/columns/:id", auth, (req, res) => {
-  const id = +req.params.id; db.cards = db.cards.filter(c => c.column_id !== id); db.columns = db.columns.filter(c => c.id !== id); saveDB(); res.json({ ok: true });
+app.delete("/api/columns/:id", auth, async (req, res) => {
+  const id = +req.params.id;
+  await supabase.from("cards").delete().eq("column_id", id);
+  await supabase.from("columns").delete().eq("id", id);
+  res.json({ ok: true });
 });
 
 // ═══ API CARDS ═══
-app.post("/api/cards", auth, (req, res) => {
+app.post("/api/cards", auth, async (req, res) => {
   const { column_id, label, label_class, title, description, content } = req.body;
-  const pos = db.cards.filter(c => c.column_id === column_id).reduce((m, c) => Math.max(m, c.position), -1) + 1;
-  const card = { id: db.nextCardId++, column_id, position: pos, label: label||"", label_class: label_class||"label-abordagem", title: title||"Novo Card", description: description||"", content: content||"" };
-  db.cards.push(card); saveDB(); res.json({ id: card.id });
+  const { data: existing } = await supabase.from("cards").select("position").eq("column_id", column_id).order("position", { ascending: false }).limit(1);
+  const pos = req.body.position !== undefined ? req.body.position : (existing?.[0]?.position ?? -1) + 1;
+  const { data, error } = await supabase.from("cards").insert({
+    column_id, position: pos, label: label||"", label_class: label_class||"label-abordagem",
+    title: title||"Novo Card", description: description||"", content: content||""
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ id: data.id });
 });
-app.put("/api/cards/:id", auth, (req, res) => {
-  const c = db.cards.find(x => x.id === +req.params.id); if (!c) return res.status(404).json({});
-  if (req.body.save_version && c.content) {
-    if (!c.versions) c.versions = [];
-    c.versions.unshift({ title: c.title, content: c.content, date: new Date().toISOString() });
-    if (c.versions.length > 20) c.versions = c.versions.slice(0, 20);
+app.put("/api/cards/:id", auth, async (req, res) => {
+  const { data: card } = await supabase.from("cards").select("*").eq("id", +req.params.id).single();
+  if (!card) return res.status(404).json({});
+  if (req.body.save_version && card.content) {
+    let versions = [];
+    try { versions = typeof card.versions === 'string' ? JSON.parse(card.versions) : (card.versions || []); } catch(e) {}
+    versions.unshift({ title: card.title, content: card.content, date: new Date().toISOString() });
+    if (versions.length > 20) versions = versions.slice(0, 20);
+    req.body.versions = JSON.stringify(versions);
   }
   delete req.body.save_version;
-  ["column_id","label","label_class","title","description","content","position"].forEach(f => { if (req.body[f] !== undefined) c[f] = req.body[f]; }); saveDB(); res.json({ ok: true });
+  const updates = {};
+  ["column_id","label","label_class","title","description","content","position","versions"].forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  await supabase.from("cards").update(updates).eq("id", +req.params.id);
+  res.json({ ok: true });
 });
-app.delete("/api/cards/:id", auth, (req, res) => { db.cards = db.cards.filter(c => c.id !== +req.params.id); saveDB(); res.json({ ok: true }); });
-app.post("/api/cards/move", auth, (req, res) => {
+app.delete("/api/cards/:id", auth, async (req, res) => {
+  await supabase.from("cards").delete().eq("id", +req.params.id);
+  res.json({ ok: true });
+});
+app.post("/api/cards/move", auth, async (req, res) => {
   const { card_id, target_column_id, position } = req.body;
-  const c = db.cards.find(x => x.id === card_id); if (!c) return res.status(404).json({});
-  c.column_id = target_column_id; c.position = position;
-  db.cards.filter(x => x.column_id === target_column_id).sort((a, b) => a.position - b.position).forEach((x, i) => { x.position = i; });
-  saveDB(); res.json({ ok: true });
+  await supabase.from("cards").update({ column_id: target_column_id, position }).eq("id", card_id);
+  // Reorder cards in target column
+  const { data: colCards } = await supabase.from("cards").select("id").eq("column_id", target_column_id).order("position");
+  if (colCards) {
+    for (let i = 0; i < colCards.length; i++) {
+      await supabase.from("cards").update({ position: i }).eq("id", colCards[i].id);
+    }
+  }
+  res.json({ ok: true });
 });
 
 // ═══ SETTINGS ═══
-app.get("/api/settings", auth, (req, res) => {
+app.get("/api/settings", auth, async (req, res) => {
+  await loadSettings();
   res.json({
     model: appSettings.model,
     permanentContext: appSettings.permanentContext,
     hasToken: !!appSettings.openaiToken,
     systemPrompt: appSettings.customSystemPrompt || SYSTEM_PROMPT,
-    playbookContext: buildPlaybookContext(),
+    playbookContext: await buildPlaybookContext(),
     extraDocs: appSettings.extraDocs || "",
   });
 });
-app.put("/api/settings", auth, (req, res) => {
-  if (req.body.token) appSettings.openaiToken = req.body.token;
-  if (req.body.model) appSettings.model = req.body.model;
-  if (req.body.permanentContext !== undefined) appSettings.permanentContext = req.body.permanentContext;
-  if (req.body.systemPrompt !== undefined) appSettings.customSystemPrompt = req.body.systemPrompt;
-  if (req.body.extraDocs !== undefined) appSettings.extraDocs = req.body.extraDocs;
-  saveSettings();
+app.put("/api/settings", auth, async (req, res) => {
+  if (req.body.token) { appSettings.openaiToken = req.body.token; await saveSetting("openaiToken", req.body.token); }
+  if (req.body.model) { appSettings.model = req.body.model; await saveSetting("model", req.body.model); }
+  if (req.body.permanentContext !== undefined) { appSettings.permanentContext = req.body.permanentContext; await saveSetting("permanentContext", req.body.permanentContext); }
+  if (req.body.systemPrompt !== undefined) { appSettings.customSystemPrompt = req.body.systemPrompt; await saveSetting("customSystemPrompt", req.body.systemPrompt); }
+  if (req.body.extraDocs !== undefined) { appSettings.extraDocs = req.body.extraDocs; await saveSetting("extraDocs", req.body.extraDocs); }
   res.json({ ok: true });
 });
 
 // ═══ CHAT AI ═══
-function buildPlaybookContext() {
-  // Build a summary of all cards for the AI system prompt
+async function buildPlaybookContext() {
+  const { data: cols } = await supabase.from("columns").select("*").order("position");
+  const { data: cards } = await supabase.from("cards").select("*").order("position");
   let ctx = "";
-  const cols = [...db.columns].sort((a, b) => a.position - b.position);
-  cols.forEach(col => {
-    const cards = db.cards.filter(c => c.column_id === col.id).sort((a, b) => a.position - b.position);
+  (cols || []).forEach(col => {
+    const colCards = (cards || []).filter(c => c.column_id === col.id);
     ctx += `\n## ${col.emoji} ${col.title}\n`;
-    cards.forEach(card => {
-      // Strip HTML tags for cleaner context
+    colCards.forEach(card => {
       const clean = (card.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       ctx += `### ${card.title}\n${card.description}\n${clean}\n\n`;
     });
@@ -325,7 +357,7 @@ app.post("/api/chat", auth, async (req, res) => {
 
   // Build full system prompt with playbook data
   let systemContent = appSettings.customSystemPrompt || SYSTEM_PROMPT;
-  systemContent += "\n\n# PLAYBOOK COMPLETO\n" + buildPlaybookContext();
+  systemContent += "\n\n# PLAYBOOK COMPLETO\n" + await buildPlaybookContext();
   if (appSettings.extraDocs) systemContent += "\n\n# DOCUMENTOS DE REFERÊNCIA\n" + appSettings.extraDocs;
   if (appSettings.permanentContext) systemContent += "\n\n# CONTEXTO ADICIONAL PERMANENTE\n" + appSettings.permanentContext;
   if (extraContext) systemContent += "\n\n# CONTEXTO DA CONVERSA ATUAL\n" + extraContext;
@@ -535,16 +567,17 @@ Gere o JSON do card.`;
     }
 
     // Find matching column
+    const { data: allCols } = await supabase.from("columns").select("id, title, emoji").order("position");
     const colMap = {};
-    db.columns.forEach(c => { colMap[c.title.toLowerCase()] = c.id; });
+    (allCols || []).forEach(c => { colMap[c.title.toLowerCase()] = c.id; });
     const suggestedCol = cardData.suggested_column || "Fluxos e Regras";
     let columnId = colMap[suggestedCol.toLowerCase()];
-    if (!columnId) columnId = colMap["fluxos e regras"] || db.columns[db.columns.length - 1]?.id || 1;
+    if (!columnId) columnId = colMap["fluxos e regras"] || (allCols && allCols.length ? allCols[allCols.length - 1].id : 1);
 
     res.json({
       ...cardData,
       column_id: columnId,
-      columns: db.columns.map(c => ({ id: c.id, title: c.title, emoji: c.emoji })),
+      columns: (allCols || []).map(c => ({ id: c.id, title: c.title, emoji: c.emoji })),
     });
 
   } catch (err) {
