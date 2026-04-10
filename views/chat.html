@@ -30,6 +30,7 @@
       <button class="shortcut" onclick="sendShortcut('reativacao')">🔙 Reativar lead antigo</button>
       <button class="shortcut" onclick="sendShortcut('fechamento')">⚜️ Fechar agendamento</button>
       <button class="shortcut" onclick="sendShortcut('print')">📸 Analisar print da conversa</button>
+      <button class="shortcut shortcut-playbook" onclick="sendShortcut('registrar_caso')">📚 Registrar caso no Playbook</button>
     </div>
     <div class="sidebar-section">
       <h3>Contexto personalizado</h3>
@@ -61,6 +62,7 @@
             <li>Quebrar objeções</li>
             <li>Criar follow-ups estratégicos</li>
             <li>📸 <strong>Analisar prints de conversas</strong> — cola a imagem com Ctrl+V</li>
+            <li>📚 <strong>Registrar caso no Playbook</strong> — descreva a situação e salve como regra</li>
           </ul>
           <p>Me conta a situação ou usa os atalhos ao lado! 👈</p>
         </div>
@@ -141,6 +143,48 @@
     </div>
     <div class="settings-footer">
       <button onclick="saveSettings()" class="btn-save-settings">💾 Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Card Preview Modal -->
+<div class="card-modal-overlay" id="cardModalOverlay" onclick="if(event.target===this)closeCardModal()">
+  <div class="card-modal">
+    <div class="card-modal-header">
+      <h2>📚 Salvar no Playbook</h2>
+      <button onclick="closeCardModal()" class="close-btn">✕</button>
+    </div>
+    <div class="card-modal-body">
+      <div class="card-form-row">
+        <div class="card-form-group" style="flex:1">
+          <label>📁 Coluna</label>
+          <select id="cardColumn"></select>
+        </div>
+        <div class="card-form-group" style="flex:1">
+          <label>🏷️ Label</label>
+          <input type="text" id="cardLabel" value="FLUXO">
+        </div>
+      </div>
+      <div class="card-form-group">
+        <label>📌 Título do card</label>
+        <input type="text" id="cardTitle" placeholder="Ex: ⚡ Lead perguntou procedimento">
+      </div>
+      <div class="card-form-group">
+        <label>📝 Descrição curta</label>
+        <input type="text" id="cardDesc" placeholder="Ex: Regra para leads com pergunta direta">
+      </div>
+      <div class="card-form-group">
+        <label>📄 Conteúdo do card (HTML)</label>
+        <div class="card-content-preview" id="cardContentPreview"></div>
+        <details style="margin-top:8px">
+          <summary style="cursor:pointer;font-size:12px;color:#888">Editar HTML</summary>
+          <textarea id="cardContent" rows="12" style="font-size:11px;font-family:monospace;margin-top:6px"></textarea>
+        </details>
+      </div>
+    </div>
+    <div class="card-modal-footer">
+      <button onclick="closeCardModal()" class="btn-cancel">Cancelar</button>
+      <button onclick="confirmSaveCard()" class="btn-save-card" id="btnSaveCard">💾 Salvar no Kanban</button>
     </div>
   </div>
 </div>

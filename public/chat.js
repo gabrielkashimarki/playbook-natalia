@@ -93,6 +93,7 @@ const SHORTCUTS = {
   reativacao: "Preciso reativar um lead antigo (mais de 15 dias). Me ajude com uma mensagem estratégica.",
   fechamento: "A paciente está interessada e quer agendar. Como conduzir o fechamento da consulta de diagnóstico?",
   print: "Colei um print da conversa. Analise a conversa, identifique a etapa do funil, e me diga exatamente o que responder agora. Sugira 2-3 opções de mensagem.",
+  registrar_caso: "Preciso registrar um caso de atendimento no playbook. Vou descrever a situação real e como deveria ter sido a abordagem correta. Analise, corrija e me dê a versão ideal com:\n\n1. O que aconteceu (erro)\n2. Como corrigir\n3. Mensagens modelo prontas\n4. Regra de condução\n\nSituação: ",
 };
 
 function sendShortcut(key) {
@@ -203,8 +204,13 @@ function addMessage(role, content, imageData) {
     <div class="msg-content">
       ${imageHtml}
       ${formattedContent || (imageData ? '<em>📸 Imagem enviada</em>' : '')}
-      ${role === 'ai' ? '<div class="msg-actions"><button class="btn-copy" onclick="copyMsg(this)">📋 Copiar</button></div>' : ''}
+      ${role === 'ai' ? `<div class="msg-actions"><button class="btn-copy" onclick="copyMsg(this)">📋 Copiar</button><button class="btn-save-playbook" onclick="saveToPlaybook(this)" title="Salvar como card no Kanban">📚 Playbook</button></div>` : ''}
     </div>`;
+
+  // Store raw text for playbook generation
+  if (role === 'ai') {
+    div.dataset.rawContent = content;
+  }
 
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
@@ -321,6 +327,130 @@ async function saveSettings() {
   } catch (e) {
     alert('Erro ao salvar: ' + e.message);
   }
+}
+
+// ═══════════════════════════════════════════════
+// SAVE TO PLAYBOOK
+// ═══════════════════════════════════════════════
+let pendingCardData = null;
+
+async function saveToPlaybook(btn) {
+  const msgDiv = btn.closest('.msg');
+  const rawContent = msgDiv.dataset.rawContent;
+  if (!rawContent) return alert('Sem conteúdo para salvar.');
+
+  // Find the preceding user message for context
+  let userMsg = '';
+  const allMsgs = [...document.querySelectorAll('.msg')];
+  const idx = allMsgs.indexOf(msgDiv);
+  for (let i = idx - 1; i >= 0; i--) {
+    if (allMsgs[i].classList.contains('user')) {
+      const content = allMsgs[i].querySelector('.msg-content');
+      const clone = content.cloneNode(true);
+      clone.querySelector('.msg-actions')?.remove();
+      userMsg = clone.innerText;
+      break;
+    }
+  }
+
+  btn.textContent = '⏳ Gerando...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/generate-card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aiResponse: rawContent, userMessage: userMsg }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao gerar card');
+    }
+
+    const data = await res.json();
+    pendingCardData = data;
+
+    // Populate modal
+    const colSelect = document.getElementById('cardColumn');
+    colSelect.innerHTML = '';
+    (data.columns || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.emoji} ${c.title}`;
+      if (c.id === data.column_id) opt.selected = true;
+      colSelect.appendChild(opt);
+    });
+
+    document.getElementById('cardTitle').value = data.title || '';
+    document.getElementById('cardDesc').value = data.description || '';
+    document.getElementById('cardLabel').value = data.label || 'FLUXO';
+    document.getElementById('cardContent').value = data.content || '';
+    document.getElementById('cardContentPreview').innerHTML = data.content || '';
+
+    // Open modal
+    document.getElementById('cardModalOverlay').classList.add('open');
+
+  } catch (err) {
+    alert('Erro: ' + err.message);
+  }
+
+  btn.textContent = '📚 Playbook';
+  btn.disabled = false;
+}
+
+// Sync preview when editing HTML
+document.addEventListener('DOMContentLoaded', () => {
+  const textarea = document.getElementById('cardContent');
+  if (textarea) {
+    textarea.addEventListener('input', () => {
+      document.getElementById('cardContentPreview').innerHTML = textarea.value;
+    });
+  }
+});
+
+function closeCardModal() {
+  document.getElementById('cardModalOverlay').classList.remove('open');
+  pendingCardData = null;
+}
+
+async function confirmSaveCard() {
+  const btn = document.getElementById('btnSaveCard');
+  btn.textContent = '⏳ Salvando...';
+  btn.disabled = true;
+
+  const columnId = +document.getElementById('cardColumn').value;
+  const title = document.getElementById('cardTitle').value.trim();
+  const description = document.getElementById('cardDesc').value.trim();
+  const label = document.getElementById('cardLabel').value.trim();
+  const content = document.getElementById('cardContent').value.trim();
+  const labelClass = label === 'OBJEÇÃO' ? 'label-objecao'
+    : label === 'FOLLOW-UP' ? 'label-followup'
+    : label === 'FECHAMENTO' ? 'label-fechamento'
+    : label === 'ANTI-VÁCUO' ? 'label-antivacuo'
+    : label === 'REATIVAÇÃO' ? 'label-reativacao'
+    : label === 'EXEMPLO' ? 'label-abordagem'
+    : 'label-fluxo';
+
+  try {
+    const res = await fetch('/api/cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ column_id: columnId, label, label_class: labelClass, title, description, content }),
+    });
+
+    if (!res.ok) throw new Error('Erro ao salvar');
+    const data = await res.json();
+
+    closeCardModal();
+    addMessage('ai', `✅ **Card salvo no Playbook!**\n\n📌 **${title}**\n📁 Salvo na coluna do Kanban (ID: ${data.id})\n\nVocê pode ver e editar o card no [Kanban](/).`);
+
+  } catch (err) {
+    alert('Erro ao salvar: ' + err.message);
+  }
+
+  btn.textContent = '💾 Salvar no Kanban';
+  btn.disabled = false;
 }
 
 // Auto-resize textarea

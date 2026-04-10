@@ -402,4 +402,118 @@ app.post("/api/chat", auth, async (req, res) => {
   }
 });
 
+// ═══ GENERATE CARD FROM CHAT (AI-powered) ═══
+const CARD_GEN_PROMPT = `Você é um formatador de playbook comercial. Receba uma descrição de situação de atendimento + a correção/abordagem ideal e transforme em um card estruturado para o Kanban do playbook.
+
+Responda APENAS com JSON válido, sem markdown, sem backticks, sem explicação. O formato:
+{
+  "title": "Título curto do card (com emoji no início)",
+  "description": "Resumo de 1 linha do que o card ensina",
+  "label": "FLUXO",
+  "label_class": "label-fluxo",
+  "suggested_column": "Fluxos e Regras",
+  "content": "<HTML do card>"
+}
+
+REGRAS para o campo "content" (HTML):
+- Use <h3> para seções
+- Use <div class="msg-box good"> para mensagens modelo (boas)
+- Use <div class="msg-box bad"> para mensagens a evitar (ruins)
+- Use <span class="tag-when"> para quando usar
+- Use <span class="tag-obj"> para tipo de situação
+- Use <ul><li> para listas
+- Use <p> e <strong> para texto
+- Estruture assim: Cenário → O que NÃO fazer → O que fazer → Mensagens modelo → Por que funciona
+- Mensagens modelo devem ser PRONTAS para copiar e colar no WhatsApp
+- Use o vocabulário correto: "entrega de diagnóstico" (não avaliação), "restauração" (não harmonização), "Protocolo Revera"
+
+Para "suggested_column", escolha entre:
+- "Contato Inicial" — se é sobre abordagem/primeiro contato
+- "Follow-Up" — se é sobre acompanhamento
+- "Quebrar Objeções" — se é sobre responder objeção
+- "Fechamento" — se é sobre fechar agendamento
+- "Anti-Vácuo" — se é sobre lead que sumiu
+- "Reativação" — se é sobre reativar lead antigo
+- "Fluxos e Regras" — se é uma regra geral ou padrão de condução`;
+
+app.post("/api/generate-card", auth, async (req, res) => {
+  const token = appSettings.openaiToken;
+  if (!token) return res.status(400).json({ error: "Token OpenAI não configurado." });
+
+  const { aiResponse, userMessage } = req.body;
+  if (!aiResponse) return res.status(400).json({ error: "Nenhum conteúdo para gerar card." });
+
+  const userPrompt = `Transforme esta análise de atendimento em um card de playbook:
+
+${userMessage ? "SITUAÇÃO DESCRITA:\n" + userMessage + "\n\n" : ""}ANÁLISE/CORREÇÃO DA IA:
+${aiResponse}
+
+Gere o JSON do card.`;
+
+  try {
+    const modelName = appSettings.model || "gpt-5.4-mini";
+    const usesNewApi = modelName.startsWith("gpt-5") || modelName.startsWith("o3") || modelName.startsWith("o4");
+    const tokenParam = usesNewApi ? "max_completion_tokens" : "max_tokens";
+
+    const body = JSON.stringify({
+      model: modelName,
+      messages: [
+        { role: "system", content: CARD_GEN_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      [tokenParam]: 3000,
+      temperature: 0.3,
+    });
+
+    const result = await new Promise((resolve, reject) => {
+      const opts = {
+        hostname: "api.openai.com",
+        path: "/v1/chat/completions",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "Content-Length": Buffer.byteLength(body),
+        },
+      };
+      const r = https.request(opts, (response) => {
+        let data = "";
+        response.on("data", chunk => data += chunk);
+        response.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) reject(new Error(parsed.error.message));
+            else resolve(parsed);
+          } catch (e) { reject(new Error("Resposta inválida da OpenAI")); }
+        });
+      });
+      r.on("error", reject);
+      r.setTimeout(60000, () => { r.destroy(); reject(new Error("Timeout")); });
+      r.write(body);
+      r.end();
+    });
+
+    const raw = result.choices?.[0]?.message?.content || "";
+    // Clean markdown fences if present
+    const clean = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const cardData = JSON.parse(clean);
+
+    // Find matching column
+    const colMap = {};
+    db.columns.forEach(c => { colMap[c.title.toLowerCase()] = c.id; });
+    const suggestedCol = cardData.suggested_column || "Fluxos e Regras";
+    let columnId = colMap[suggestedCol.toLowerCase()];
+    if (!columnId) columnId = colMap["fluxos e regras"] || db.columns[db.columns.length - 1]?.id || 1;
+
+    res.json({
+      ...cardData,
+      column_id: columnId,
+      columns: db.columns.map(c => ({ id: c.id, title: c.title, emoji: c.emoji })),
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => console.log(`\n  Playbook rodando em http://localhost:${PORT}\n`));
