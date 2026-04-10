@@ -463,6 +463,7 @@ Gere o JSON do card.`;
       ],
       [tokenParam]: 3000,
       temperature: 0.3,
+      response_format: { type: "json_object" },
     });
 
     const result = await new Promise((resolve, reject) => {
@@ -496,7 +497,42 @@ Gere o JSON do card.`;
     const raw = result.choices?.[0]?.message?.content || "";
     // Clean markdown fences if present
     const clean = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const cardData = JSON.parse(clean);
+    
+    let cardData;
+    try {
+      cardData = JSON.parse(clean);
+    } catch (parseErr) {
+      // Fallback: try to extract fields with regex if JSON is malformed
+      try {
+        const titleMatch = clean.match(/"title"\s*:\s*"([^"]*?)"/);
+        const descMatch = clean.match(/"description"\s*:\s*"([^"]*?)"/);
+        const labelMatch = clean.match(/"label"\s*:\s*"([^"]*?)"/);
+        const labelClassMatch = clean.match(/"label_class"\s*:\s*"([^"]*?)"/);
+        const colMatch = clean.match(/"suggested_column"\s*:\s*"([^"]*?)"/);
+        // Extract content between "content": " and the last "} — handles multiline HTML
+        const contentMatch = clean.match(/"content"\s*:\s*"([\s\S]*)"[\s\n]*\}$/);
+        
+        if (!titleMatch || !contentMatch) throw new Error("Não foi possível extrair os campos do card");
+        
+        // Unescape the content field
+        let contentVal = contentMatch[1];
+        // Remove trailing quote if present
+        if (contentVal.endsWith('"')) contentVal = contentVal.slice(0, -1);
+        // Fix escaped sequences
+        contentVal = contentVal.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        
+        cardData = {
+          title: titleMatch[1],
+          description: descMatch ? descMatch[1] : "",
+          label: labelMatch ? labelMatch[1] : "FLUXO",
+          label_class: labelClassMatch ? labelClassMatch[1] : "label-fluxo",
+          suggested_column: colMatch ? colMatch[1] : "Fluxos e Regras",
+          content: contentVal,
+        };
+      } catch (fallbackErr) {
+        throw new Error("Erro ao processar resposta da IA: " + parseErr.message);
+      }
+    }
 
     // Find matching column
     const colMap = {};
